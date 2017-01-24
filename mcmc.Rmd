@@ -1,0 +1,120 @@
+---
+title: "Metropolis-Hastings"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+```
+
+#### Oznaczenia
+
+* $X \in \mathbb{R}^n_p$ - dane (_macierz obserwowanych $n$ zdarzeń o $p$ wymiarach._)
+* dupa
+    
+#### Wiarogodność (_loglikelihood_)
+
+_"The likelihood that any parameter
+(or set of parameters) should have any assigned value (or set of values) is proportional to the probability that if this were so, the totality of
+observations should be that observed"_
+[Fisher (1922)]
+
+$$\mathcal{L}(\phi|X) \propto P(X|\phi) = f_{\phi}((\mathbf{x}_1,\mathbf{x}_2,…,\mathbf{x}_n)) = \prod_{i=1}^n f_{\phi}(\mathbf{x}_i)$$
+
+#### Formuła Bayesowska
+
+Zakładamy, że zmienna losowa $x|\phi$ pochodzi z rozkładu o parametrach $\phi$ i $\Sigma$:
+
+$$ x|\phi \sim \mathcal{N}(\phi, \Sigma) \qquad \implies \qquad p(x|\phi) = \frac{1}{(2\pi)^{p/2} |\Sigma|^{1/2}} exp\left\{ -\frac{1}{x}(x-\phi)^T \Sigma (x-\phi \right\} $$
+
+$$P(\phi|x) = \frac{P(X|\phi) P(\phi)}{\int P(X|\phi)P(\phi) d\phi} \propto P(X|\phi) P(\phi) = \mathcal{L}(\phi) P(\phi) $$
+
+Do symulacji przyjmujemy:
+
+$$ \log P(\phi|x) \propto \log\mathcal{L}(\phi) \log P(\phi) $$
+
+#### Monte Carlo łańcuchów Markowa (MCMC)
+
+$(\phi_1, …, \phi_M)$ - proces stochastyczny taki, że: $\mathbb{P}(\phi_{i+1} \le t | (\phi_1,…,\phi_i)) = \mathbb{P}(\phi_{i+1} \le t | \phi_i)$.
+
+#### Symulacja
+
+> Generowanie danych 
+
+```{r}
+N <- 50
+sd <- N/5
+## Parametry, ktore bedziemy estymowali
+phi_1 <- 3.5
+phi_0 <- 2
+
+X <- matrix(nrow=N,ncol=p-1,runif(N*(p-1))) %>% cbind(1,.)
+phi <- sample(p)*ifelse(runif(p)<0.5,-1,1)
+sd <- 2
+efekt_losowy <- rnorm(n=N, mean=0, sd=sd)
+y <- phi %*% t(X) + efekt_losowy
+```
+
+```{r, dependson=sd}
+normal_density <- function(mean, sd) exp(-(x-mean)^2/(2*sd^2)) / ((2*pi)^{.5}*sd)
+logL <- function(phi){
+    hat_mean <- phi %*% t(X)
+    loglikelihood <- dnorm(X, mean=hat_mean, sd=sd) %>% log %>% colSums
+    return(loglikelihood)
+}
+log_prior <- function(phi) dnorm(phi,0,2) %>% log %>% sum
+
+```
+
+
+```{r}
+log_posterior <- function(...) return(logL(...) + log_prior(...))
+```
+
+### Metropolis algorithm
+
+```{r}
+metropolis_loop <- function(init=1:3, n_iter=100){
+    markow <- array(dim=c(n_iter+1,length(init)))
+    markow[1,] <- init
+    for(i in 2:n_iter){
+        proposal <- rnorm(length(init), mean = markow[i-1,], sd= c(1,1,1))
+        loglik_ratio <- log_posterior(proposal) - log_posterior(markow[i-1,])
+        if( loglik_ratio > log(runif(1)) ){
+            out <- proposal
+        }else{
+            out <- markow[i-1,]
+        }
+        markow[i,] <- out
+    }
+    return(markow)
+}
+
+markow <- metropolis_loop(init=1:3, n_iter=20)
+plot(markow[,1], type='l')
+markow
+```
+
+
+
+```{r}
+metrop2 <- function(n=1000,eps=0.5){
+    S <- vector("numeric", n)
+    S[1] <- init <- 0
+    oldll <- dnorm(x,log=TRUE)
+    for (i in 2:n) {
+            proposal <- x+runif(1,-eps,eps)
+            loglik <- dnorm(proposal,log=TRUE)
+            loga=loglik-oldll
+            if (log(runif(1)) < loga) { 
+                    x=proposal
+                    oldll=loglik
+                    }
+            vec[i]=x
+    }
+    vec
+}
+metropolis1 <- metrop3(100, .5)
+plot(metropolis1, type='l')
+```
