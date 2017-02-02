@@ -1,0 +1,118 @@
+---
+title: "Metropolis-Hastings"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, cache=F, warning = F)
+```
+
+#### Oznaczenia
+
+* $X \in \mathbb{R}^n_p$ - macierz obserwowanych $n$ zdarzeń o $p$ wymiarach.
+* $y \in \mathbb{R}^1_p$ - obserwowane wyniki
+    
+#### Wiarogodność (_loglikelihood_)
+
+<!-- _"The likelihood that any parameter -->
+<!-- (or set of parameters) should have any assigned value (or set of values) is proportional to the probability that if this were so, the totality of -->
+<!-- observations should be that observed"_ -->
+<!-- [Fisher (1922)] -->
+
+$$\mathcal{L}(\phi|X) \propto P(X|\phi) = f_{\phi}((\mathbf{x}_1,\mathbf{x}_2,…,\mathbf{x}_n)) = \prod_{i=1}^n f_{\phi}(\mathbf{x}_i)$$
+
+#### Formuła Bayesowska
+
+<!-- Zakładamy, że zmienna losowa $x|\phi$ pochodzi z rozkładu o parametrach $\phi$ i $\Sigma$: -->
+
+<!-- $$ x|\phi \sim \mathcal{N}(\phi, \Sigma) \qquad \implies \qquad p(x|\phi) = \frac{1}{(2\pi)^{p/2} |\Sigma|^{1/2}} exp\left\{ -\frac{1}{x}(x-\phi)^T \Sigma (x-\phi \right\} $$ -->
+
+$$P(\phi|x) = \frac{P(X|\phi) P(\phi)}{\int P(X|\phi)P(\phi) d\phi} \propto P(X|\phi) P(\phi) = \mathcal{L}(\phi) P(\phi) $$
+
+Do symulacji przyjmujemy:
+
+$$ \log P(\phi|x) \propto \log\mathcal{L}(\phi) \log P(\phi) $$
+
+<!-- #### Monte Carlo łańcuchów Markowa (MCMC) -->
+
+<!-- $(\phi_1, …, \phi_M)$ - proces stochastyczny taki, że: $\mathbb{P}(\phi_{i+1} \le t | (\phi_1,…,\phi_i)) = \mathbb{P}(\phi_{i+1} \le t | \phi_i)$. -->
+
+
+> Generowanie danych 
+
+```{r}
+library(dplyr)
+library(rmutil)
+
+N <- 1000
+sd <- 2
+## Parametry, ktore bedziemy estymowali
+p <- 3
+(phi <- sample(p)*ifelse(runif(p)<0.5,-1,1)/3)
+
+X <- matrix(nrow=N,ncol=p-1,runif(N*(p-1))) %>% cbind(1,.)
+head(X)
+efekt_losowy <- rnorm(n=N, mean=0, sd=sd)
+y <- phi %*% t(X) + efekt_losowy
+```
+
+```{r, dependson=sd}
+logL <- function(phi){
+    hat_y <- phi %*% t(X)
+    loglikelihood <- dnorm(y, mean=hat_y, sd=sd, log=T) %>% rowSums
+    return(loglikelihood)
+}
+
+log_prior <- function(phi,FUN) FUN(phi,0,2, log=T) %>% sum
+log_posterior <- function(phi,FUN) return(logL(phi)+log_prior(phi,FUN))
+```
+
+> Metropolis-Hastings
+
+```{r}
+mh <- function(init, n_iter=100, FUN=dlaplace){
+    p <- length(init)
+    markow <- array(dim=c(n_iter,p))
+    markow[1,] <- init
+    for(i in 2:n_iter){
+        proposal <- rnorm(p, markow[i-1,], rep(1,p))
+        loglik_ratio <- log_posterior(proposal,FUN) - log_posterior(markow[i-1,],FUN)
+        if(exp(loglik_ratio)>runif(1))
+            markow[i,] <- proposal else
+                markow[i,] <- markow[i-1,]
+    }
+    return(markow)
+}
+
+M = 5000
+P = 3
+markow_l <- mh(init=1:P, n_iter=M, dlaplace)
+markow_n <- mh(init=1:P, n_iter=M, dnorm)
+par(mfrow=c(P,4))
+# par(mai=c(1,.5,0.1,.5))
+for(i in 1:P){
+    plot(markow_l[,i], type='l')
+    abline(h=phi[i], col='red', lty=2, lwd=3)
+    hist(markow_l[-(1:100),i], nclass=50, type='l', main='')
+    abline(v=phi[i], col='red', lty=2, lwd=3)
+            plot(markow_n[,i], type='l')
+            abline(h=phi[i], col='red', lty=2, lwd=3)
+            hist(markow_n[-(1:100),i], nclass=50, type='l', main='')
+            abline(v=phi[i], col='red', lty=2, lwd=3)
+}
+```
+
+### Rozkład Laplace'a
+
+```{r}
+library(rmutil)
+markow <- mh(init=1:3, n_iter=M, rlaplace)
+par(mfrow=c(P,2))
+par(mai=c(1,.5,0.1,.5))
+for(i in 1:P){
+    plot(markow[,i], type='l')
+    abline(h=phi[i], col='red', lty=2, lwd=3)
+    hist(markow[-(1:100),i], nclass=50, type='l', main='')
+    abline(v=phi[i], col='red', lty=2, lwd=3)
+}
+```
